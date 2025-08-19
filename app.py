@@ -2,12 +2,15 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import plotly.colors as pc  # <-- IMPORTANTE: AÑADIR ESTA LÍNEA
 import seaborn as sns
 import matplotlib.pyplot as plt
 from io import BytesIO
 import streamlit as st
 from scipy import stats
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.decomposition import PCA
 
 # --------------------------
 # CONFIGURACIÓN DE LA APP
@@ -38,6 +41,12 @@ st.markdown("""
     }
     .stTabs [data-baseweb="tab-list"] {
         justify-content: center;
+    }
+    .report-section {
+        background-color: #f8f9fa;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -98,7 +107,7 @@ df_filtered = df[
     (df["fecha"] <= pd.to_datetime(fecha_max)) &
     (df["categoria"].isin(categorias_sel)) &
     (df["region"].isin(regiones_sel))
-]
+].copy()  # <-- IMPORTANTE: Usar .copy() para evitar SettingWithCopyWarning
 
 if normalizar_datos:
     scaler = MinMaxScaler()
@@ -301,6 +310,11 @@ with tab2:
 with tab3:
     st.header("Análisis Geográfico")
     
+    # Crear datos de mapa una vez para todo el tab
+    df_map = df_filtered.copy()
+    df_map['lat'] = np.random.uniform(-34, -33, size=len(df_map))
+    df_map['lon'] = np.random.uniform(-71, -70, size=len(df_map))
+    
     # Gráfico 9: Mapa de Calor Regional
     st.subheader("Mapa de Calor Regional")
     region_data = df_filtered.groupby('region').agg({
@@ -338,10 +352,6 @@ with tab3:
     
     # Gráfico 11: Mapa de Dispersión
     st.subheader("Mapa de Dispersión de Clientes")
-    df_map = df_filtered.copy()
-    df_map['lat'] = np.random.uniform(-34, -33, size=len(df_map))
-    df_map['lon'] = np.random.uniform(-71, -70, size=len(df_map))
-    
     fig11 = px.scatter_mapbox(
         df_map,
         lat="lat",
@@ -360,7 +370,7 @@ with tab3:
     # Gráfico 12: Análisis de Rutas
     st.subheader("Análisis de Rutas de Distribución")
     fig12 = px.line_geo(
-        df_filtered,
+        df_map,
         lat="lat",
         lon="lon",
         color="region",
@@ -447,9 +457,6 @@ with tab4:
     
     # Gráfico 16: Análisis de Componentes Principales (PCA)
     st.subheader("Análisis de Componentes Principales")
-    from sklearn.decomposition import PCA
-    from sklearn.preprocessing import StandardScaler
-    
     features = ["ventas", "clientes", "satisfaccion", "margen", "devoluciones"]
     x = df_filtered.loc[:, features].values
     x = StandardScaler().fit_transform(x)
@@ -504,12 +511,29 @@ with tab5:
     )
     st.plotly_chart(fig17, use_container_width=True)
     
-    # Gráfico 18: Gráfico de Sankey
+    # Gráfico 18: Gráfico de Sankey - CORREGIDO
     st.subheader("Flujo de Ventas por Región y Categoría")
     sankey_df = df_filtered.groupby(['region', 'categoria'])['ventas'].sum().reset_index()
     
     regiones = sankey_df['region'].unique()
     categorias = sankey_df['categoria'].unique()
+    
+    # Normalizar valores de ventas para asignar colores
+    min_ventas = sankey_df['ventas'].min()
+    max_ventas = sankey_df['ventas'].max()
+    norm_ventas = (sankey_df['ventas'] - min_ventas) / (max_ventas - min_ventas)
+    
+    # Crear colores basados en la paleta seleccionada
+    if paleta == "viridis":
+        colors = pc.sample_colorscale("Viridis", norm_ventas.tolist())
+    elif paleta == "plasma":
+        colors = pc.sample_colorscale("Plasma", norm_ventas.tolist())
+    elif paleta == "inferno":
+        colors = pc.sample_colorscale("Inferno", norm_ventas.tolist())
+    elif paleta == "magma":
+        colors = pc.sample_colorscale("Magma", norm_ventas.tolist())
+    else:  # cividis
+        colors = pc.sample_colorscale("Cividis", norm_ventas.tolist())
     
     fig18 = go.Figure(data=[go.Sankey(
         node=dict(
@@ -517,14 +541,13 @@ with tab5:
             thickness=20,
             line=dict(color="black", width=0.5),
             label=list(regiones) + list(categorias),
-            color=["blue"] * len(regiones) + ["green"] * len(categorias)
+            color=["#1f77b4"] * len(regiones) + ["#ff7f0e"] * len(categorias)
         ),
         link=dict(
             source=[list(regiones).index(r) for r in sankey_df['region']],
             target=[len(regiones) + list(categorias).index(c) for c in sankey_df['categoria']],
             value=sankey_df['ventas'],
-            color=sankey_df['ventas'],
-            colorscale=paleta
+            color=colors,  # <-- CORREGIDO: Usar colores válidos
         )
     )])
     
@@ -604,6 +627,19 @@ with tab6:
     missing_data = df_filtered.isnull().sum().reset_index()
     missing_data.columns = ['Columna', 'Valores Faltantes']
     st.dataframe(missing_data, use_container_width=True)
+    
+    # Nueva sección: Resumen de análisis
+    st.markdown('<div class="report-section">', unsafe_allow_html=True)
+    st.subheader("📋 Resumen de Análisis")
+    st.markdown(f"""
+    - **Período analizado**: {fecha_min} a {fecha_max}
+    - **Categorías seleccionadas**: {', '.join(categorias_sel)}
+    - **Regiones incluidas**: {', '.join(regiones_sel)}
+    - **Total de registros**: {len(df_filtered)}
+    - **Ventas totales**: ${df_filtered['ventas'].sum():,.2f}
+    - **Satisfacción promedio**: {df_filtered['satisfaccion'].mean():.2f}/5
+    """)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # --------------------------
 # FOOTER
