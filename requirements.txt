@@ -6,3 +6,7 @@ matplotlib
 scipy
 scikit-learn
 streamlit
+openpyxl
+XlsxWriter
+pillow
+
