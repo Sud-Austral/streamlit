@@ -3,7 +3,7 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import plotly.colors as pc  # <-- IMPORTANTE: AÑADIR ESTA LÍNEA
+import plotly.colors as pc
 import seaborn as sns
 import matplotlib.pyplot as plt
 from io import BytesIO
@@ -107,7 +107,7 @@ df_filtered = df[
     (df["fecha"] <= pd.to_datetime(fecha_max)) &
     (df["categoria"].isin(categorias_sel)) &
     (df["region"].isin(regiones_sel))
-].copy()  # <-- IMPORTANTE: Usar .copy() para evitar SettingWithCopyWarning
+].copy()
 
 if normalizar_datos:
     scaler = MinMaxScaler()
@@ -386,21 +386,34 @@ with tab3:
 with tab4:
     st.header("Análisis Estadístico Avanzado")
     
-    # Gráfico 13: Regresión Lineal
+    # Gráfico 13: Regresión Lineal - CORREGIDO
     st.subheader("Regresión Lineal: Ventas vs Clientes")
     slope, intercept, r_value, p_value, std_err = stats.linregress(
         df_filtered['clientes'], df_filtered['ventas']
     )
     
+    # Crear scatter plot con Plotly Express
     fig13 = px.scatter(
         df_filtered,
         x="clientes",
         y="ventas",
-        trendline="ols",
-        trendline_color_override="red",
+        color="categoria",
         title=f"Ventas vs Clientes (R²={r_value**2:.2f})",
-        template=tema
+        template=tema,
+        size_max=tamaño_puntos*2
     )
+    
+    # Añadir línea de regresión
+    x_vals = np.array([df_filtered['clientes'].min(), df_filtered['clientes'].max()])
+    y_vals = intercept + slope * x_vals
+    fig13.add_trace(go.Scatter(
+        x=x_vals,
+        y=y_vals,
+        mode='lines',
+        name=f'Regresión (R²={r_value**2:.2f})',
+        line=dict(color='red', width=3)
+    ))
+    
     st.plotly_chart(fig13, use_container_width=True)
     
     # Gráfico 14: Distribución de Probabilidad
@@ -511,7 +524,7 @@ with tab5:
     )
     st.plotly_chart(fig17, use_container_width=True)
     
-    # Gráfico 18: Gráfico de Sankey - CORREGIDO
+    # Gráfico 18: Gráfico de Sankey
     st.subheader("Flujo de Ventas por Región y Categoría")
     sankey_df = df_filtered.groupby(['region', 'categoria'])['ventas'].sum().reset_index()
     
@@ -547,7 +560,7 @@ with tab5:
             source=[list(regiones).index(r) for r in sankey_df['region']],
             target=[len(regiones) + list(categorias).index(c) for c in sankey_df['categoria']],
             value=sankey_df['ventas'],
-            color=colors,  # <-- CORREGIDO: Usar colores válidos
+            color=colors,
         )
     )])
     
