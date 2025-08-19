@@ -53,6 +53,7 @@ st.markdown("""
 
 st.markdown('<h1 class="main-header">🚀 Dashboard Analítico Avanzado</h1>', unsafe_allow_html=True)
 st.markdown("Explora datos interactivos con visualizaciones modernas")
+st.markdown("Segmento construido como ejemplo")
 
 # --------------------------
 # DATA SIMULADA MEJORADA
