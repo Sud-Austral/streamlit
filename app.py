@@ -4,6 +4,7 @@ import plotly.express as px
 import seaborn as sns
 import matplotlib.pyplot as plt
 from io import BytesIO
+import streamlit as st
 
 # --------------------------
 # CONFIGURACIÓN DE LA APP
