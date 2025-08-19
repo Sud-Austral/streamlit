@@ -1,9 +1,3 @@
-import streamlit as st
-
-st.title("Mi primer dashboard en Streamlit")
-st.write("¡Hola, esto es un ejemplo!")
-
-import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
