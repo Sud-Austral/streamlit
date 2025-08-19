@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import numpy as np
+import requests
 from data import get_data
 
 # Generar datos simulados
@@ -15,32 +16,6 @@ idi_total = df.groupby(['Región', 'Año'])['Aporte Delito al IDI'].sum().reset_
 idi_total.rename(columns={'Aporte Delito al IDI': 'IDI Total'}, inplace=True)
 # Unir IDI total al DataFrame original
 df = pd.merge(df, idi_total, on=['Región', 'Año'])
-
-# AGREGAR COORDENADAS DE REGIONES
-coordenadas_regiones = {
-    'Arica y Parinacota': {'lat': -18.4788, 'lon': -70.3126},
-    'Tarapacá': {'lat': -20.2132, 'lon': -69.5714},
-    'Antofagasta': {'lat': -23.6500, 'lon': -70.4000},
-    'Atacama': {'lat': -27.5500, 'lon': -70.0000},
-    'Coquimbo': {'lat': -30.0000, 'lon': -71.0000},
-    'Valparaíso': {'lat': -33.0000, 'lon': -71.5000},
-    'Metropolitana': {'lat': -33.4500, 'lon': -70.6667},
-    "O'Higgins": {'lat': -34.5000, 'lon': -71.0000},
-    'Maule': {'lat': -35.5000, 'lon': -71.5000},
-    'Ñuble': {'lat': -36.6000, 'lon': -72.0000},
-    'Biobío': {'lat': -37.5000, 'lon': -72.0000},
-    'La Araucanía': {'lat': -38.7000, 'lon': -72.5000},
-    'Los Ríos': {'lat': -40.5000, 'lon': -73.0000},
-    'Los Lagos': {'lat': -42.0000, 'lon': -73.5000},
-    'Aysén': {'lat': -46.5000, 'lon': -73.0000},
-    'Magallanes': {'lat': -53.0000, 'lon': -70.0000}
-}
-
-# Crear DataFrame con coordenadas
-df_coordenadas = pd.DataFrame([
-    {'Región': region, 'lat': data['lat'], 'lon': data['lon']}
-    for region, data in coordenadas_regiones.items()
-])
 
 # Configuración de la página de Streamlit
 st.set_page_config(layout="wide")
@@ -150,46 +125,67 @@ fig4.update_layout(
 )
 st.plotly_chart(fig4, use_container_width=True)
 
-# SECCIÓN DE MAPAS
-st.header("Análisis Geográfico de Delincuencia")
+# SECCIÓN DE MAPA CON FORMAS DE REGIONES
+st.header("Mapa de Delincuencia por Región (Formas Geográficas)")
 
 # Obtener último año disponible en todo el dataset
 ultimo_año_global = df['Año'].max()
 
 # Preparar datos para el mapa
-df_mapa = df[df['Año'] == ultimo_año_global].groupby('Región').agg({
-    'IDI Total': 'first',
-    'Frecuencia': 'sum',
-    'Población Estimada': 'first'
+df_mapa = df[df['Año'] == 2024].groupby('Región').agg({
+    'Frecuencia': 'sum'
 }).reset_index()
+df_mapa["Codreg"] = range(len(df_mapa))
 
-# Unir con coordenadas
-df_mapa = pd.merge(df_mapa, df_coordenadas, on='Región', how='left')
+# Mapear nombres de regiones a los del GeoJSON
+mapeo_regiones = {
+    'Arica y Parinacota': 'ARICA Y PARINACOTA',
+    'Tarapacá': 'TARAPACÁ',
+    'Antofagasta': 'ANTOFAGASTA',
+    'Atacama': 'ATACAMA',
+    'Coquimbo': 'COQUIMBO',
+    'Valparaíso': 'VALPARAÍSO',
+    'Metropolitana': 'METROPOLITANA DE SANTIAGO',
+    "O'Higgins": "LIBERTADOR GENERAL BERNARDO O'HIGGINS",
+    'Maule': 'MAULE',
+    'Ñuble': 'ÑUBLE',
+    'Biobío': 'BÍO-BÍO',
+    'La Araucanía': 'LA ARAUCANÍA',
+    'Los Ríos': 'LOS RÍOS',
+    'Los Lagos': 'LOS LAGOS',
+    'Aysén': 'AISÉN DEL GENERAL CARLOS IBÁÑEZ DEL CAMPO',
+    'Magallanes': 'MAGALLANES Y DE LA ANTÁRTICA CHILENA'
+}
 
-# Crear mapa de burbujas
-fig_mapa = px.scatter_mapbox(
+df_mapa['region_geojson'] = df_mapa['Región'].map(mapeo_regiones)
+
+# Cargar GeoJSON desde URL
+url_geojson = "https://raw.githubusercontent.com/Sud-Austral/streamlit/refs/heads/main/regiones.json"
+
+
+response = requests.get(url_geojson)
+geojson_data = response.json()
+
+# Crear mapa coroplético
+fig_mapa = px.choropleth_mapbox(
     df_mapa,
-    lat="lat",
-    lon="lon",
-    size="IDI Total",
-    color="IDI Total",
-    hover_name="Región",
+    geojson=geojson_data,
+    locations='Codreg',               # columna en tu df
+    featureidkey="properties.Codreg", # campo en el geojson
+    color='Frecuencia',
+    hover_name='Región',
     hover_data={
-        "IDI Total": ":.2f",
-        "Frecuencia": ":,.0f",
-        "Población Estimada": ":,.0f",
-        "lat": False,
-        "lon": False
+        'Frecuencia': ':,.0f',
+        'Codreg': False
     },
     color_continuous_scale=px.colors.sequential.Viridis,
-    size_max=50,
+    mapbox_style="carto-positron",
     zoom=4,
-    title=f"Índice de Delincuencia por Región ({ultimo_año_global})"
+    center={"lat": -35, "lon": -70},
+    title=f"Índice de Delincuencia por Región (2024)"
 )
 
 fig_mapa.update_layout(
-    mapbox_style="open-street-map",
-    height=600,
     margin={"r": 0, "t": 30, "l": 0, "b": 0}
 )
 
@@ -222,24 +218,29 @@ with st.expander("Explicación del Análisis de Componentes Principales"):
     Este análisis permite identificar patrones y relaciones complejas entre los diferentes tipos de delitos que no son evidentes en los análisis univariados.
     """)
 
-with st.expander("Explicación del Mapa de Delincuencia"):
+with st.expander("Explicación del Mapa Coroplético"):
     st.markdown("""
-    **Mapa de Delincuencia por Región**
+    **Mapa Coroplético de Delincuencia por Región**
     
-    Este mapa muestra la distribución geográfica del Índice de Delincuencia Integrado (IDI) a nivel nacional:
+    Este mapa muestra la distribución geográfica del Índice de Delincuencia Integrado (IDI) a nivel nacional utilizando las formas reales de las regiones:
     
-    - **Tamaño de las burbujas:** Representa la magnitud del IDI total de cada región (a mayor tamaño, mayor índice de delincuencia).
-    
-    - **Color de las burbujas:** Indica la intensidad del IDI (escala de verde a amarillo, donde amarillo representa valores más altos).
+    - **Color de las regiones:** Representa la intensidad del IDI (escala de verde a amarillo, donde amarillo representa valores más altos).
     
     - **Información al pasar el cursor:** Muestra detalles específicos de cada región:
         - IDI Total
         - Total de delitos
         - Población estimada
     
+    **Características del Mapa:**
+    
+    - **Base cartográfica:** Utiliza datos geográficos oficiales de Chile en formato GeoJSON.
+    - **Precisión geográfica:** Muestra los límites reales de cada región.
+    - **Interactividad:** Permite hacer zoom, desplazarse y obtener información detallada al hacer clic o pasar el cursor.
+    - **Comparación visual:** Facilita la identificación de patrones geográficos y regiones con mayor incidencia delictiva.
+    
     **Interpretación:**
     
-    - Las regiones con burbujas más grandes y de color más intenso tienen mayor incidencia delictiva.
+    - Las regiones con colores más intensos (amarillos) tienen mayor índice de delincuencia.
     - Permite comparar rápidamente la situación de delincuencia entre diferentes regiones.
     - Facilita la identificación de patrones geográficos en la distribución de la delincuencia.
     """)
